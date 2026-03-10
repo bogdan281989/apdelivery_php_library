@@ -1,6 +1,7 @@
 # APDelivery PHP Library
 
-PHP-клієнт для роботи з [APDelivery API](https://api.apdelivery.site/).
+PHP-клієнт для [APDelivery API](https://api.apdelivery.site/) — географічні довідники України та відділення поштових перевізників.
+
 Один файл, без зовнішніх залежностей. Підтримує **PHP 5.6 – 8.4**.
 
 ---
@@ -11,14 +12,13 @@ PHP-клієнт для роботи з [APDelivery API](https://api.apdelivery.
 - [Встановлення](#встановлення)
 - [Швидкий старт](#швидкий-старт)
 - [Конфігурація](#конфігурація)
+- [Автентифікація](#автентифікація)
+  - [Bearer Token (звичайний режим)](#bearer-token-звичайний-режим)
+  - [HMAC підпис](#hmac-підпис)
 - [Методи API](#методи-api)
-  - [Довідники](#довідники)
-  - [Розрахунок вартості](#розрахунок-вартості)
-  - [Замовлення](#замовлення)
-  - [Відстеження](#відстеження)
-  - [Мітки / Накладні](#мітки--накладні)
-  - [Вебхуки](#вебхуки)
-  - [Обліковий запис](#обліковий-запис)
+  - [Географія](#географія)
+  - [Відділення перевізників](#відділення-перевізників)
+  - [Інформація про API](#інформація-про-api)
   - [Довільні запити](#довільні-запити)
 - [Обробка помилок](#обробка-помилок)
 - [Безпека](#безпека)
@@ -28,10 +28,10 @@ PHP-клієнт для роботи з [APDelivery API](https://api.apdelivery.
 
 ## Вимоги
 
-| Вимога          | Версія      |
-|-----------------|-------------|
-| PHP             | 5.6 – 8.4   |
-| Розширення cURL | будь-яке    |
+| Вимога          | Версія    |
+|-----------------|-----------|
+| PHP             | 5.6 – 8.4 |
+| Розширення cURL | будь-яке  |
 
 ---
 
@@ -45,18 +45,18 @@ PHP-клієнт для роботи з [APDelivery API](https://api.apdelivery.
 require_once '/path/to/APDelivery.php';
 ```
 
-### Варіант 2 — через Composer (якщо підключено репозиторій)
+### Варіант 2 — через Composer
 
 ```json
 {
     "repositories": [
         {
             "type": "vcs",
-            "url": "https://github.com/your-org/apdelivery_php_library"
+            "url": "https://github.com/bogdan281989/apdelivery_php_library"
         }
     ],
     "require": {
-        "your-org/apdelivery": "^1.0"
+        "bogdan281989/apdelivery": "^2.0"
     }
 }
 ```
@@ -75,260 +75,333 @@ require_once 'APDelivery.php';
 
 $client = new APDelivery('YOUR_API_KEY');
 
-// Отримати список міст
-$cities = $client->getCities(['name' => 'Київ']);
-print_r($cities);
+// Отримати всі області
+$regions = $client->getRegions(['lang' => 'ua']);
+foreach ($regions['data'] as $region) {
+    echo $region['name'] . "\n";
+}
 
-// Відстежити посилку
-$tracking = $client->trackShipment('1234567890');
-print_r($tracking);
+// Знайти місто
+$cities = $client->getCities(['search' => 'Київ', 'lang' => 'ua']);
+
+// Відділення Нової Пошти у місті
+$warehouses = $client->getWarehouses([
+    'carrier'   => APDelivery::CARRIER_NOVA_POSHTA,
+    'city_uuid' => $cities['data'][0]['uuid'],
+]);
 ```
 
 ---
 
 ## Конфігурація
 
-Конструктор приймає API-ключ та масив опцій:
-
 ```php
 $client = new APDelivery('YOUR_API_KEY', [
-    'timeout'         => 30,          // Таймаут запиту, сек (за замовчуванням: 30)
-    'ssl_verify'      => true,        // Перевіряти SSL-сертифікат (за замовчуванням: true)
-    'max_retries'     => 1,           // Повторні спроби при помилках 5xx / мережі (за замовчуванням: 1)
-    'base_url'        => 'https://api.apdelivery.site', // Базова URL (за замовчуванням)
+    // HMAC-підпис (для ключів з restriction_type=hmac)
+    'hmac_secret'     => 'YOUR_HMAC_SECRET',
+
+    // Таймаут запиту у секундах (за замовчуванням: 30)
+    'timeout'         => 30,
+
+    // Перевіряти SSL-сертифікат (за замовчуванням: true, не вимикайте у production)
+    'ssl_verify'      => true,
+
+    // Кількість повторних спроб при помилках 5xx / мережі (за замовчуванням: 1)
+    'max_retries'     => 1,
+
+    // Базова URL API (за замовчуванням: https://api.apdelivery.site)
+    'base_url'        => 'https://api.apdelivery.site',
+
+    // Додаткові заголовки до кожного запиту
     'default_headers' => [
-        'X-Custom-Header' => 'value', // Додаткові заголовки до кожного запиту
+        'X-Custom-Header' => 'value',
     ],
-    'proxy'           => [            // Налаштування проксі (необов'язково)
+
+    // Проксі (необов'язково)
+    'proxy' => [
         'host' => 'proxy.example.com',
         'port' => 8080,
-        'user' => 'proxyuser',        // необов'язково
-        'pass' => 'proxypass',        // необов'язково
+        'user' => 'proxyuser', // необов'язково
+        'pass' => 'proxypass', // необов'язково
     ],
 ]);
 ```
 
-### Зміна API-ключа під час роботи
+### Зміна ключа під час роботи
 
 ```php
 $client->setApiKey('NEW_API_KEY');
+$client->setHmacSecret('NEW_SECRET');
+$client->disableHmac(); // повернутися до звичайного Bearer
+```
+
+---
+
+## Автентифікація
+
+### Bearer Token (звичайний режим)
+
+Для ключів з `restriction_type = none`, `ip` або `domain` достатньо передати лише API ключ:
+
+```php
+$client = new APDelivery('YOUR_API_KEY');
+```
+
+Кожен запит автоматично матиме заголовок:
+```
+Authorization: Bearer YOUR_API_KEY
+```
+
+### HMAC підпис
+
+Для ключів з `restriction_type = hmac` кожен запит підписується за допомогою HMAC-SHA256.
+
+```php
+$client = new APDelivery('YOUR_API_KEY', [
+    'hmac_secret' => 'YOUR_HMAC_SECRET',
+]);
+```
+
+Бібліотека автоматично додає до кожного запиту:
+- `X-Timestamp` — поточний Unix timestamp
+- `X-Signature` — HMAC-SHA256 підпис
+
+**Формула підпису:**
+```
+string_to_sign = timestamp + "\n" + METHOD + "\n" + path + query_string
+signature      = HMAC-SHA256(hmac_secret, string_to_sign)
+```
+
+**Приклад для `GET /v1/regions?lang=ua`:**
+```
+string_to_sign = "1709900000\nGET\n/v1/regions?lang=ua"
+signature      = HMAC-SHA256("your_hmac_secret", string_to_sign)
 ```
 
 ---
 
 ## Методи API
 
-### Довідники
+### Географія
 
-#### Міста
+#### Області (`/v1/regions`)
 
 ```php
-// Список усіх міст
-$client->getCities();
+// Усі області
+$result = $client->getRegions();
 
-// Пошук міст з фільтрами
-$client->getCities([
-    'name'     => 'Харків',
-    'page'     => 1,
-    'per_page' => 50,
+// З параметрами
+$result = $client->getRegions([
+    'lang'    => 'ua',            // 'ua' (за замовчуванням) або 'en'
+    'uuid'    => 'a1b2c3d4-...',  // конкретна область
+    'search'  => 'Київ',          // пошук за назвою
+    'carrier' => 'novaposhta',    // лише області з відділеннями перевізника
 ]);
 
-// Отримати місто за ID
-$client->getCity(123);
+// Структура відповіді:
+// $result['success'] === true
+// $result['data']    — масив об'єктів Region
+// $result['meta']['total'] — загальна кількість
+foreach ($result['data'] as $region) {
+    echo $region['uuid'] . ' — ' . $region['name'] . "\n";
+    // Також: name_ua, name_en, koatuu, katottg
+}
 ```
 
-#### Регіони
+#### Райони (`/v1/districts`)
 
 ```php
-$client->getRegions();
-$client->getRegions(['page' => 1, 'per_page' => 25]);
-```
-
-#### Відділення / склади
-
-```php
-// Список усіх відділень
-$client->getWarehouses();
-
-// Відділення в конкретному місті
-$client->getWarehouses(['city_id' => 123]);
-
-// Конкретне відділення
-$client->getWarehouse(456);
-```
-
-#### Послуги доставки
-
-```php
-$client->getDeliveryServices();
-```
-
----
-
-### Розрахунок вартості
-
-```php
-$price = $client->calculateShipping([
-    'from_city_id'   => 1,       // ID міста відправника
-    'to_city_id'     => 2,       // ID міста отримувача
-    'weight'         => 2.5,     // кг
-    'width'          => 30,      // см
-    'height'         => 20,      // см
-    'length'         => 40,      // см
-    'service_type'   => 'standard',
-    'declared_value' => 500.00,  // грн
+$result = $client->getDistricts([
+    'region_uuid' => 'a1b2c3d4-...',  // фільтр за областю
+    'lang'        => 'ua',
+    'search'      => 'Бориспіль',
+    'carrier'     => 'ukrposhta',
+    'page'        => 1,
+    'limit'       => 50,              // макс. 100
 ]);
 
-echo $price['total_cost'];
+// $result['meta'] містить: total, page, limit, pages
 ```
 
----
+#### Міста (`/v1/cities`)
 
-### Замовлення
-
-#### Створити замовлення
+Підтримує full-text пошук (від 3 символів).
 
 ```php
-$order = $client->createOrder([
-    'from_city_id' => 1,
-    'to_city_id'   => 2,
-    'sender' => [
-        'name'  => 'Іван Іванов',
-        'phone' => '+380991234567',
-    ],
-    'recipient' => [
-        'name'         => 'Петро Петров',
-        'phone'        => '+380997654321',
-        'warehouse_id' => 456,
-    ],
-    'cargo' => [
-        'weight'          => 1.5,
-        'declared_value'  => 300,
-        'description'     => 'Електроніка',
-    ],
-    'service_type'  => 'standard',
-    'payment_payer' => 'sender',   // 'sender' | 'recipient'
+$result = $client->getCities([
+    'search'        => 'Харків',      // full-text (мін. 3 символи)
+    'lang'          => 'ua',
+    'region_uuid'   => 'a1b2c3d4-...',
+    'district_uuid' => 'b2c3d4e5-...',
+    'carrier'       => 'meest',
+    'page'          => 1,
+    'limit'         => 20,
 ]);
 
-echo $order['order_id'];
+foreach ($result['data'] as $city) {
+    echo $city['name_ua'] . ' (' . $city['city_type_short'] . ')' . "\n";
+    // Також: uuid, region_uuid, district_uuid, name_en, koatuu, katottg,
+    //        population, latitude, longitude, is_districtcenter,
+    //        region_name, district_name
+}
 ```
 
-#### Отримати замовлення
+#### Вулиці (`/v1/streets`)
+
+Обов'язковий параметр: `city_uuid` або `city_id`.
 
 ```php
-$order = $client->getOrder('ORD-001234');
-```
-
-#### Список замовлень
-
-```php
-$orders = $client->getOrders([
-    'status'   => 'pending',
-    'page'     => 1,
-    'per_page' => 20,
+$result = $client->getStreets([
+    'city_uuid' => 'uuid-міста',   // обов'язково (або city_id)
+    'search'    => 'Хрещатик',     // full-text (мін. 3 символи)
+    'lang'      => 'ua',
+    'page'      => 1,
+    'limit'     => 50,
 ]);
-```
 
-#### Оновити замовлення
-
-```php
-$client->updateOrder('ORD-001234', [
-    'recipient' => [
-        'phone' => '+380661112233',
-    ],
-]);
-```
-
-#### Скасувати замовлення
-
-```php
-$client->cancelOrder('ORD-001234');
-```
-
----
-
-### Відстеження
-
-```php
-// Поточний статус
-$status = $client->trackShipment('1234567890');
-
-// Повна історія переміщень
-$history = $client->getTrackingHistory('1234567890');
-foreach ($history['events'] as $event) {
-    echo $event['date'] . ' — ' . $event['status'] . "\n";
+foreach ($result['data'] as $street) {
+    echo $street['street_type_short'] . ' ' . $street['name_ua'] . "\n";
+    // Також: uuid, city_uuid, name_en, street_type, old_name_ua, old_name_en
 }
 ```
 
 ---
 
-### Мітки / Накладні
+### Відділення перевізників
+
+#### `/v1/warehouses`
+
+Обов'язкові параметри: `carrier` та `city_uuid`.
 
 ```php
-// PDF (за замовчуванням)
-$label = $client->getLabel('ORD-001234');
-file_put_contents('label.pdf', base64_decode($label['data']));
+// Константи перевізників
+APDelivery::CARRIER_NOVA_POSHTA  // 'novaposhta'
+APDelivery::CARRIER_UKRPOSHTA    // 'ukrposhta'
+APDelivery::CARRIER_MEEST        // 'meest'
+APDelivery::CARRIER_ROZETKA      // 'rozetka'
 
-// ZPL для термопринтерів
-$label = $client->getLabel('ORD-001234', 'zpl');
-
-// PNG
-$label = $client->getLabel('ORD-001234', 'png');
+// Константи типів
+APDelivery::WAREHOUSE_TYPE_POSTOMAT  // 'postomat'
+APDelivery::WAREHOUSE_TYPE_BRANCH    // 'branch'
 ```
 
----
-
-### Вебхуки
+**Нова Пошта:**
 
 ```php
-// Реєстрація вебхука
-$webhook = $client->createWebhook([
-    'url'    => 'https://yoursite.com/webhooks/delivery',
-    'events' => ['order.created', 'order.delivered', 'order.cancelled'],
+$result = $client->getWarehouses([
+    'carrier'   => APDelivery::CARRIER_NOVA_POSHTA,
+    'city_uuid' => 'uuid-міста',
+    'type'      => APDelivery::WAREHOUSE_TYPE_BRANCH, // або 'postomat'
+    'search'    => 'Пирогівський',
+    'number'    => '1',
+    'page'      => 1,
+    'limit'     => 50,
 ]);
 
-// Список вебхуків
-$client->getWebhooks();
+foreach ($result['data'] as $w) {
+    echo $w['number'] . ': ' . $w['name'] . "\n";
+    // Також: uuid, city_uuid, np_ref, address, latitude, longitude,
+    //        phone, status, category
+}
+```
 
-// Видалити вебхук
-$client->deleteWebhook(789);
+**Укрпошта:**
+
+```php
+$result = $client->getWarehouses([
+    'carrier'   => APDelivery::CARRIER_UKRPOSHTA,
+    'city_uuid' => 'uuid-міста',
+    'postcode'  => '01001',  // пошуку за індексом (лише ukrposhta)
+]);
+
+foreach ($result['data'] as $w) {
+    echo $w['postcode'] . ' — ' . $w['name'] . "\n";
+    // Також: po_index, number, name_en, address, type, type_description,
+    //        category, is_mobile, is_stationary, latitude, longitude,
+    //        schedule, phone
+}
+```
+
+**Meest Express:**
+
+```php
+$result = $client->getWarehouses([
+    'carrier'   => APDelivery::CARRIER_MEEST,
+    'city_uuid' => 'uuid-міста',
+]);
+
+foreach ($result['data'] as $w) {
+    echo $w['number_showcase'] . ': ' . $w['street_ua'] . ', ' . $w['street_number'] . "\n";
+    // Також: meest_br_id, city_ua, city_en, street_en, postcode,
+    //        latitude, longitude, location_description, type_ua, type_en,
+    //        schedule, parcel_max_kg, place_max_kg
+}
+```
+
+**Rozetka Delivery:**
+
+```php
+$result = $client->getWarehouses([
+    'carrier'   => APDelivery::CARRIER_ROZETKA,
+    'city_uuid' => 'uuid-міста',
+]);
+
+foreach ($result['data'] as $w) {
+    echo $w['name'] . ' — ' . $w['street_name'] . ', ' . $w['house'] . "\n";
+    // Також: rz_department_id, city_name, latitude, longitude,
+    //        schedule, carrier_name, department_type_name
+}
+```
+
+**Структура `meta` для відділень:**
+
+```php
+$result['meta']['total']   // загальна кількість відділень
+$result['meta']['page']
+$result['meta']['limit']
+$result['meta']['pages']
+$result['meta']['carrier'] // підтверджує перевізника запиту
 ```
 
 ---
 
-### Обліковий запис
+### Інформація про API
 
 ```php
-// Дані профілю
-$profile = $client->getProfile();
-echo $profile['name'];
+$info = $client->getInfo();
 
-// Баланс рахунку
-$balance = $client->getBalance();
-echo $balance['amount'] . ' ' . $balance['currency'];
+echo $info['data']['api_version'];          // '1.0'
+echo $info['data']['rate_limit']['limit'];     // ліміт запитів на добу
+echo $info['data']['rate_limit']['used'];      // використано сьогодні
+echo $info['data']['rate_limit']['remaining']; // залишилось
+
+// Список ендпоінтів
+foreach ($info['data']['endpoints'] as $endpoint => $description) {
+    echo $endpoint . ' — ' . $description . "\n";
+}
 ```
 
 ---
 
 ### Довільні запити
 
-Якщо API має ендпоінти, яких ще немає в бібліотеці, використовуйте generic-методи:
+Якщо в API з'являться нові ендпоінти, їх можна викликати напряму:
 
 ```php
-// GET
-$result = $client->get('/api/v1/some-endpoint', ['param' => 'value']);
+$result = $client->get('/v1/some-endpoint', ['param' => 'value']);
+$result = $client->post('/v1/some-endpoint', ['key' => 'value']);
+$result = $client->put('/v1/some-endpoint', ['key' => 'value']);
+$result = $client->patch('/v1/some-endpoint', ['key' => 'value']);
+$result = $client->delete('/v1/some-endpoint');
+```
 
-// POST
-$result = $client->post('/api/v1/some-endpoint', ['key' => 'value']);
+### Діагностика останнього запиту
 
-// PUT
-$result = $client->put('/api/v1/resource/123', ['field' => 'newvalue']);
-
-// PATCH
-$result = $client->patch('/api/v1/resource/123', ['field' => 'newvalue']);
-
-// DELETE
-$result = $client->delete('/api/v1/resource/123');
+```php
+$info = $client->getLastResponseInfo();
+echo 'HTTP code:   ' . $info['http_code']   . "\n";
+echo 'Total time:  ' . $info['total_time']  . " s\n";
+echo 'URL called:  ' . $info['url']         . "\n";
 ```
 
 ---
@@ -337,77 +410,95 @@ $result = $client->delete('/api/v1/resource/123');
 
 Бібліотека використовує ієрархію виключень:
 
-| Клас                            | Коли виникає                                            |
-|---------------------------------|----------------------------------------------------------|
-| `APDeliveryException`           | Базовий клас; загальні помилки (відсутній cURL тощо)    |
-| `APDeliveryValidationException` | Невірні параметри, відсутні обов'язкові поля            |
-| `APDeliveryHttpException`       | HTTP-відповідь з кодом ≥ 400                            |
-| `APDeliveryAuthException`       | HTTP 401 / 403 — помилка автентифікації                 |
+| Клас                            | HTTP-код | Коли виникає                                          |
+|---------------------------------|----------|-------------------------------------------------------|
+| `APDeliveryException`           | —        | Базовий клас; помилка cURL, JSON тощо                 |
+| `APDeliveryValidationException` | —        | Невірні вхідні параметри до відправки запиту          |
+| `APDeliveryHttpException`       | ≥ 400    | Будь-яка HTTP-помилка від API                         |
+| `APDeliveryAuthException`       | 401/403  | Невірний ключ, IP, домен або HMAC підпис              |
+| `APDeliveryRateLimitException`  | 429      | Перевищено добовий ліміт запитів                      |
 
 ```php
 <?php
 require_once 'APDelivery.php';
 
 try {
-    $client = new APDelivery('YOUR_API_KEY');
-    $order  = $client->getOrder('ORD-INVALID');
+    $client = new APDelivery(getenv('APDELIVERY_API_KEY'));
+    $result = $client->getWarehouses([
+        'carrier'   => 'novaposhta',
+        'city_uuid' => 'some-uuid',
+    ]);
+    print_r($result['data']);
+
+} catch (APDeliveryRateLimitException $e) {
+    // HTTP 429 — добовий ліміт вичерпано
+    echo 'Ліміт запитів вичерпано: ' . $e->getMessage();
+    // $e->getApiCode() === 'RATE_LIMIT_EXCEEDED'
 
 } catch (APDeliveryAuthException $e) {
-    // Невірний або прострочений API-ключ
-    echo 'Помилка автентифікації: ' . $e->getMessage();
-    echo ' | HTTP-код: ' . $e->getStatusCode();
+    // HTTP 401/403 — проблеми з автентифікацією
+    echo 'Помилка доступу (' . $e->getApiCode() . '): ' . $e->getMessage();
+    // Можливі API коди: API_KEY_MISSING, API_KEY_INVALID, API_KEY_INACTIVE,
+    //                   IP_FORBIDDEN, DOMAIN_FORBIDDEN,
+    //                   HMAC_MISSING, HMAC_EXPIRED, HMAC_INVALID
 
 } catch (APDeliveryHttpException $e) {
-    // Будь-яка інша HTTP-помилка (404, 422, 500 тощо)
-    echo 'HTTP-помилка ' . $e->getStatusCode() . ': ' . $e->getMessage();
+    echo 'HTTP ' . $e->getStatusCode() . ' [' . $e->getApiCode() . ']: ' . $e->getMessage();
     $body = $e->getResponseBody(); // масив із тіла відповіді або null
 
 } catch (APDeliveryValidationException $e) {
-    // Невірні вхідні дані ще до відправки запиту
-    echo 'Помилка валідації: ' . $e->getMessage();
+    // Невірний параметр ще до відправки запиту
+    echo 'Помилка параметрів: ' . $e->getMessage();
 
 } catch (APDeliveryException $e) {
-    // Все інше (помилка cURL, проблема кодування JSON тощо)
-    echo 'Помилка бібліотеки: ' . $e->getMessage();
+    // cURL, JSON encoding тощо
+    echo 'Помилка клієнта: ' . $e->getMessage();
 }
 ```
 
-### Діагностика останнього запиту
+### Коди помилок API (`getApiCode()`)
 
-```php
-$info = $client->getLastResponseInfo();
-echo 'Total time: ' . $info['total_time'] . 's' . "\n";
-echo 'HTTP code: '  . $info['http_code']  . "\n";
-```
+| Код                    | Опис                                        |
+|------------------------|---------------------------------------------|
+| `API_KEY_MISSING`      | Заголовок Authorization відсутній           |
+| `API_KEY_INVALID`      | Невірний ключ                               |
+| `API_KEY_INACTIVE`     | Ключ деактивовано                           |
+| `IP_FORBIDDEN`         | IP-адреса не дозволена                      |
+| `DOMAIN_FORBIDDEN`     | Домен не дозволений                         |
+| `HMAC_MISSING`         | Відсутні заголовки X-Timestamp / X-Signature |
+| `HMAC_EXPIRED`         | X-Timestamp виходить за межі ±5 хвилин      |
+| `HMAC_INVALID`         | Невірний HMAC підпис                        |
+| `MISSING_PARAMETER`    | Відсутній обов'язковий параметр             |
+| `RATE_LIMIT_EXCEEDED`  | Добовий ліміт запитів вичерпано             |
+| `SERVER_ERROR`         | Внутрішня помилка сервера                   |
 
 ---
 
 ## Безпека
 
-Бібліотека розроблена з урахуванням таких заходів захисту:
+| Захист                      | Реалізація                                                                             |
+|-----------------------------|----------------------------------------------------------------------------------------|
+| **Перевірка SSL**           | `ssl_verify => true` за замовчуванням; не вимикайте у production                      |
+| **Захист API-ключа**        | Відхиляє порожні рядки та символи керування (`\x00–\x1F`) — header injection guard    |
+| **HMAC підпис**             | Автоматичне підписання запитів; timestamp в межах ±5 хв — захист від replay-атак      |
+| **Захист від SSRF**         | `validateHttpsUrl()`: лише HTTPS, без localhost/127.x.x.x, без RFC-1918 діапазонів    |
+| **Без автоперенаправлень**  | `CURLOPT_FOLLOWLOCATION = false` — запити не переходять на інші хости                 |
+| **Whitelist параметрів**    | `pickAllowed()` фільтрує лише дозволені ключі перед надсиланням на сервер             |
+| **Валідація enum-значень**  | `carrier`, `lang`, `type` перевіряються до відправки запиту                           |
+| **Retry з back-off**        | Повтори тільки на 5xx/мережу з exponential back-off, не на 4xx                        |
 
-| Захист                        | Реалізація                                                                              |
-|-------------------------------|-----------------------------------------------------------------------------------------|
-| **Перевірка SSL**             | `ssl_verify => true` за замовчуванням; не вимикайте у production                       |
-| **Валідація API-ключа**       | Відхиляє порожні рядки та ключі з керуючими символами (захист від header injection)    |
-| **Захист від SSRF**           | `sanitizeUrl()` дозволяє лише HTTPS і відхиляє localhost, приватні та link-local IP    |
-| **Без автоперенаправлень**    | `CURLOPT_FOLLOWLOCATION = false` — запити не переходять на інші хости                  |
-| **Санітизація ID ресурсів**   | Лише цілі числа або UUID/slug — неможливо вставити зайве у URL-шлях                   |
-| **Обов'язкові поля**          | `requireFields()` перевіряє вхідні дані до відправки запиту                            |
-| **Безпечне кодування URL**    | `rawurlencode` для шляху, `http_build_query` для рядка запиту                          |
-
-### Рекомендації зі зберігання ключа
+### Зберігання ключа
 
 ```php
-// Правильно — читати ключ зі змінної середовища
+// Правильно — змінна середовища
 $client = new APDelivery(getenv('APDELIVERY_API_KEY'));
 
-// Правильно — або з конфіг-файлу поза webroot
-$config = require '/var/secrets/apdelivery.php';
-$client = new APDelivery($config['api_key']);
+// Правильно — конфіг-файл поза webroot
+$cfg = require '/var/secrets/apdelivery.php';
+$client = new APDelivery($cfg['api_key'], ['hmac_secret' => $cfg['hmac_secret']]);
 
-// НЕБЕЗПЕЧНО — жорстко закодований ключ у коді/репозиторії
-$client = new APDelivery('live_abc123secretkey');
+// НЕБЕЗПЕЧНО — не зберігайте ключі у коді або репозиторії
+$client = new APDelivery('live_key_abc123...');
 ```
 
 ---
