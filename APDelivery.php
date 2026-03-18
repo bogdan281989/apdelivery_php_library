@@ -682,12 +682,33 @@ class APDelivery
 
         if ($httpCode >= 200 && $httpCode < 300) {
             if (is_array($decoded)) {
+                // Treat success=false as an error even when the HTTP status is 2xx.
+                // Some API gateway configurations always return HTTP 200 and signal
+                // authentication failures (e.g. invalid API key) only via the body.
+                if (isset($decoded['success']) && $decoded['success'] === false) {
+                    list($message, $apiCode) = $this->extractErrorInfo($httpCode, $rawBody, $decoded);
+                    $this->throwForApiCode($message, $httpCode, $apiCode, $decoded);
+                }
                 return $decoded;
             }
             return array('raw' => $rawBody);
         }
 
         // Extract error info from { "success": false, "error": { "message": "...", "code": "..." } }
+        list($message, $apiCode) = $this->extractErrorInfo($httpCode, $rawBody, $decoded);
+        $this->throwForApiCode($message, $httpCode, $apiCode, $decoded);
+    }
+
+    /**
+     * Extract a human-readable message and API error code from a decoded response body.
+     *
+     * @param int         $httpCode
+     * @param string      $rawBody
+     * @param array|null  $decoded
+     * @return array  [message (string), apiCode (string)]
+     */
+    private function extractErrorInfo($httpCode, $rawBody, $decoded)
+    {
         $message = 'HTTP ' . $httpCode;
         $apiCode = '';
 
@@ -699,11 +720,48 @@ class APDelivery
             $message .= ' — ' . substr($rawBody, 0, 200);
         }
 
+        return array($message, $apiCode);
+    }
+
+    /**
+     * Throw the most specific exception for the given HTTP status code and API error code.
+     *
+     * HTTP 401/403 always produce APDeliveryAuthException.
+     * HTTP 429 always produces APDeliveryRateLimitException.
+     * For 2xx responses with success=false, the API error code determines the exception type:
+     * authentication-related codes produce APDeliveryAuthException,
+     * RATE_LIMIT_EXCEEDED produces APDeliveryRateLimitException, and
+     * everything else produces APDeliveryHttpException.
+     *
+     * @param string     $message
+     * @param int        $httpCode
+     * @param string     $apiCode
+     * @param array|null $decoded
+     * @throws APDeliveryAuthException
+     * @throws APDeliveryRateLimitException
+     * @throws APDeliveryHttpException
+     */
+    private function throwForApiCode($message, $httpCode, $apiCode, $decoded)
+    {
         if ($httpCode === 401 || $httpCode === 403) {
             throw new APDeliveryAuthException($message, $httpCode, $apiCode, $decoded);
         }
 
         if ($httpCode === 429) {
+            throw new APDeliveryRateLimitException($message, $httpCode, $apiCode, $decoded);
+        }
+
+        $authCodes = array(
+            'API_KEY_MISSING', 'API_KEY_INVALID', 'API_KEY_INACTIVE',
+            'IP_FORBIDDEN', 'DOMAIN_FORBIDDEN',
+            'HMAC_MISSING', 'HMAC_EXPIRED', 'HMAC_INVALID',
+        );
+
+        if (in_array($apiCode, $authCodes, true)) {
+            throw new APDeliveryAuthException($message, $httpCode, $apiCode, $decoded);
+        }
+
+        if ($apiCode === 'RATE_LIMIT_EXCEEDED') {
             throw new APDeliveryRateLimitException($message, $httpCode, $apiCode, $decoded);
         }
 
