@@ -159,6 +159,7 @@ class APDelivery
     private static $validCarriers      = array('novaposhta', 'ukrposhta', 'meest', 'rozetka');
     private static $validLangs         = array('ua', 'en');
     private static $validWarehouseTypes = array('postomat', 'branch');
+    private static $allowedMethods     = array('GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS');
 
     // ─────────────────────────────────────────────────────────────────────────
     //  Constructor
@@ -191,12 +192,14 @@ class APDelivery
             $this->setHmacSecret($hmacSecret);
         }
 
-        $this->baseUrl        = isset($options['base_url'])        ? rtrim($this->validateHttpsUrl($options['base_url']), '/') : self::API_BASE_URL;
-        $this->timeout        = isset($options['timeout'])         ? max(1, (int) $options['timeout'])                          : 30;
-        $this->sslVerify      = isset($options['ssl_verify'])      ? (bool) $options['ssl_verify']                              : true;
-        $this->defaultHeaders = isset($options['default_headers']) ? (array) $options['default_headers']                        : array();
-        $this->proxy          = isset($options['proxy'])           ? (array) $options['proxy']                                   : null;
-        $this->maxRetries     = isset($options['max_retries'])     ? max(0, (int) $options['max_retries'])                       : 1;
+        $this->baseUrl    = isset($options['base_url'])   ? rtrim($this->validateHttpsUrl($options['base_url']), '/') : self::API_BASE_URL;
+        $this->timeout    = isset($options['timeout'])    ? max(1, (int) $options['timeout'])                          : 30;
+        $this->sslVerify  = isset($options['ssl_verify']) ? (bool) $options['ssl_verify']                              : true;
+        $this->proxy      = isset($options['proxy'])      ? (array) $options['proxy']                                   : null;
+        $this->maxRetries = isset($options['max_retries'])? max(0, (int) $options['max_retries'])                       : 1;
+
+        $rawHeaders = isset($options['default_headers']) ? (array) $options['default_headers'] : array();
+        $this->defaultHeaders = $this->validateHeadersArray($rawHeaders);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -513,7 +516,13 @@ class APDelivery
      */
     public function request($method, $endpoint, array $body = array(), array $queryParams = array(), array $extraHeaders = array())
     {
-        $method   = strtoupper($method);
+        $method = strtoupper($method);
+        if (!in_array($method, self::$allowedMethods, true)) {
+            throw new APDeliveryValidationException(
+                'Invalid HTTP method "' . $method . '". Allowed: ' . implode(', ', self::$allowedMethods)
+            );
+        }
+
         $path     = '/' . ltrim($endpoint, '/');
         $query    = !empty($queryParams) ? '?' . http_build_query($queryParams, '', '&') : '';
         $url      = $this->baseUrl . $path . $query;
@@ -576,10 +585,10 @@ class APDelivery
         }
 
         foreach ($this->defaultHeaders as $name => $value) {
-            $headers[$name] = $value;
+            $headers[$this->sanitizeHeaderName($name)] = $this->sanitizeHeaderValue($value);
         }
         foreach ($extra as $name => $value) {
-            $headers[$name] = $value;
+            $headers[$this->sanitizeHeaderName($name)] = $this->sanitizeHeaderValue($value);
         }
 
         return $headers;
@@ -792,6 +801,59 @@ class APDelivery
     }
 
     /**
+     * Validate an array of HTTP header name => value pairs.
+     * Called at construction time for 'default_headers' to fail fast on invalid input.
+     *
+     * @param array $headers
+     * @return array  The validated headers (unchanged).
+     * @throws APDeliveryValidationException
+     */
+    private function validateHeadersArray(array $headers)
+    {
+        foreach ($headers as $name => $value) {
+            $this->sanitizeHeaderName((string) $name);
+            $this->sanitizeHeaderValue((string) $value);
+        }
+        return $headers;
+    }
+
+    /**
+     * Validate an HTTP header name.
+     * Allows only RFC 7230 token characters: letters, digits, and '-'.
+     *
+     * @param string $name
+     * @return string
+     * @throws APDeliveryValidationException
+     */
+    private function sanitizeHeaderName($name)
+    {
+        if (!preg_match('/^[a-zA-Z0-9\-]+$/', (string) $name)) {
+            throw new APDeliveryValidationException(
+                'Header name contains invalid characters: ' . $name
+            );
+        }
+        return $name;
+    }
+
+    /**
+     * Validate an HTTP header value.
+     * Rejects CR, LF, and NUL characters to prevent header injection.
+     *
+     * @param string $value
+     * @return string
+     * @throws APDeliveryValidationException
+     */
+    private function sanitizeHeaderValue($value)
+    {
+        if (preg_match('/[\r\n\x00]/', (string) $value)) {
+            throw new APDeliveryValidationException(
+                'Header value contains invalid characters (CR, LF or NUL).'
+            );
+        }
+        return $value;
+    }
+
+    /**
      * JSON-encode data, throwing on failure.
      *
      * @param mixed $data
@@ -841,6 +903,11 @@ class APDelivery
         }
 
         $host    = strtolower($parts['host']);
+        // Strip surrounding brackets from IPv6 literals, e.g. [::1] → ::1
+        if (strlen($host) > 2 && $host[0] === '[' && $host[strlen($host) - 1] === ']') {
+            $host = substr($host, 1, -1);
+        }
+
         $blocked = array('localhost', '127.0.0.1', '::1', '0.0.0.0');
 
         if (in_array($host, $blocked, true)) {
@@ -857,6 +924,38 @@ class APDelivery
                 ($n >= ip2long('169.254.0.0')  && $n <= ip2long('169.254.255.255'))
             ) {
                 throw new APDeliveryValidationException('Private/link-local IP addresses are not allowed.');
+            }
+        }
+
+        // Block private/link-local IPv6 ranges (SSRF guard)
+        if (filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+            $packed = inet_pton($host);
+            // fc00::/7 — Unique Local Addresses (ULA): first byte 0xFC or 0xFD
+            $firstByte = ord($packed[0]);
+            if (($firstByte & 0xFE) === 0xFC) {
+                throw new APDeliveryValidationException('ULA (Unique Local) IPv6 addresses are not allowed.');
+            }
+            // fe80::/10 — Link-Local: first byte 0xFE, second byte high bits 10xxxxxx (0x80–0xBF)
+            if ($firstByte === 0xFE && (ord($packed[1]) & 0xC0) === 0x80) {
+                throw new APDeliveryValidationException('Link-local IPv6 addresses are not allowed.');
+            }
+            // ::ffff:0:0/96 — IPv4-mapped IPv6: first 10 bytes 0x00, bytes 10-11 0xFF 0xFF
+            if (substr($packed, 0, 10) === "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+                && substr($packed, 10, 2) === "\xFF\xFF"
+            ) {
+                // Validate the embedded IPv4 address
+                $unpacked = unpack('N', substr($packed, 12, 4));
+                $embeddedIpv4 = isset($unpacked[1]) ? long2ip($unpacked[1]) : '0.0.0.0';
+                $n = ip2long($embeddedIpv4);
+                if (
+                    ($n >= ip2long('10.0.0.0')    && $n <= ip2long('10.255.255.255'))  ||
+                    ($n >= ip2long('172.16.0.0')   && $n <= ip2long('172.31.255.255'))  ||
+                    ($n >= ip2long('192.168.0.0')  && $n <= ip2long('192.168.255.255')) ||
+                    ($n >= ip2long('169.254.0.0')  && $n <= ip2long('169.254.255.255')) ||
+                    ($n >= ip2long('127.0.0.0')    && $n <= ip2long('127.255.255.255'))
+                ) {
+                    throw new APDeliveryValidationException('Private/link-local IP addresses are not allowed.');
+                }
             }
         }
 
