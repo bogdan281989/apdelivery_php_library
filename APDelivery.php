@@ -420,6 +420,36 @@ class APDelivery
         return $this->get('/v1/info');
     }
 
+    /**
+     * Check whether the configured API key is accepted by the server.
+     *
+     * Unlike getInfo(), this method never throws an authentication exception.
+     * It returns true when the server confirms the key is valid and false when
+     * the server responds with HTTP 401 / 403 or an authentication-related API
+     * error code (API_KEY_INVALID, API_KEY_INACTIVE, IP_FORBIDDEN, etc.).
+     *
+     * All other exceptions (network / cURL errors, 5xx) propagate normally so
+     * that transient infrastructure problems are not silently swallowed.
+     *
+     * Typical usage — validate the key before processing an order:
+     *
+     *   if (!$client->validateApiKey()) {
+     *       // show "invalid API key" message in admin panel
+     *   }
+     *
+     * @return bool  true if the key is valid, false if authentication fails.
+     * @throws APDeliveryException  On network or cURL errors.
+     */
+    public function validateApiKey()
+    {
+        try {
+            $this->getInfo();
+            return true;
+        } catch (APDeliveryAuthException $e) {
+            return false;
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     //  Generic HTTP helpers (public)
     // ─────────────────────────────────────────────────────────────────────────
