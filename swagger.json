@@ -1,0 +1,1382 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "APDelivery API",
+    "description": "API для отримання географічних даних України та відділень поштових перевізників (Нова Пошта, Укрпошта, Meest Express, Rozetka Delivery).\n\n## Автентифікація\n\nAPI підтримує три типи обмеження доступу (restriction_type):\n\n- **none** — тільки API ключ (Bearer Token)\n- **ip** — API ключ + обмеження за IP-адресою\n- **domain** — API ключ + обмеження за доменом (Origin/Referer)\n- **hmac** — API ключ + HMAC-SHA256 підпис запиту (для серверних інтеграцій)\n\n## HMAC автентифікація\n\nДля ключів з `restriction_type = hmac` кожен запит повинен містити два додаткові заголовки:\n\n- `X-Timestamp` — поточний Unix timestamp (±5 хвилин від серверного часу)\n- `X-Signature` — HMAC-SHA256 підпис\n\n**Формула підпису:**\n```\nstring_to_sign = timestamp + \"\\n\" + METHOD + \"\\n\" + path + query\nsignature = HMAC-SHA256(api_secret, string_to_sign)\n```\n\n**Приклад (GET /v1/regions?lang=ua):**\n```\nstring_to_sign = \"1709900000\\nGET\\n/v1/regions?lang=ua\"\nsignature = HMAC-SHA256(\"your_api_secret\", string_to_sign)\n```\n\n**Заголовки запиту:**\n```\nAuthorization: Bearer your_api_key\nX-Timestamp: 1709900000\nX-Signature: a1b2c3d4e5f6...\n```",
+    "version": "1.0",
+    "contact": {
+      "name": "APDelivery"
+    }
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Поточний сервер"
+    }
+  ],
+  "security": [
+    {
+      "BearerAuth": []
+    }
+  ],
+  "paths": {
+    "/v1/regions": {
+      "get": {
+        "tags": [
+          "Географія"
+        ],
+        "summary": "Отримання областей",
+        "description": "Повертає список областей України з можливістю фільтрації та пошуку.",
+        "parameters": [
+          {
+            "name": "uuid",
+            "in": "query",
+            "description": "UUID конкретної області",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Пошук за назвою області",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Мова відповіді",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ua",
+                "en"
+              ],
+              "default": "ua"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/carrier_filter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Список областей",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Region"
+                          }
+                        },
+                        "meta": {
+                          "type": "object",
+                          "properties": {
+                            "total": {
+                              "type": "integer",
+                              "example": 25
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "example": {
+                  "success": true,
+                  "data": [
+                    {
+                      "uuid": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+                      "name_ua": "Київська",
+                      "name_en": "Kyivska",
+                      "name": "Київська",
+                      "koatuu": "3200000000",
+                      "katottg": "UA32000000000000000"
+                    }
+                  ],
+                  "meta": {
+                    "total": 25
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/v1/districts": {
+      "get": {
+        "tags": [
+          "Географія"
+        ],
+        "summary": "Отримання районів",
+        "description": "Повертає список районів з пагінацією. Можна фільтрувати за областю.",
+        "parameters": [
+          {
+            "name": "uuid",
+            "in": "query",
+            "description": "UUID конкретного району",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "region_uuid",
+            "in": "query",
+            "description": "UUID області для фільтрації",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Пошук за назвою району",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Мова відповіді",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ua",
+                "en"
+              ],
+              "default": "ua"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/carrier_filter"
+          },
+          {
+            "$ref": "#/components/parameters/page"
+          },
+          {
+            "$ref": "#/components/parameters/limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Список районів",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/District"
+                          }
+                        },
+                        "meta": {
+                          "$ref": "#/components/schemas/PaginationMeta"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/v1/cities": {
+      "get": {
+        "tags": [
+          "Географія"
+        ],
+        "summary": "Отримання міст",
+        "description": "Повертає список міст/селищ з пагінацією. Підтримує full-text пошук (від 3 символів).",
+        "parameters": [
+          {
+            "name": "uuid",
+            "in": "query",
+            "description": "UUID конкретного міста",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "region_uuid",
+            "in": "query",
+            "description": "UUID області для фільтрації",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "district_uuid",
+            "in": "query",
+            "description": "UUID району для фільтрації",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Пошук за назвою міста (full-text від 3 символів)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Мова відповіді",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ua",
+                "en"
+              ],
+              "default": "ua"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/carrier_filter"
+          },
+          {
+            "$ref": "#/components/parameters/page"
+          },
+          {
+            "$ref": "#/components/parameters/limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Список міст",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/City"
+                          }
+                        },
+                        "meta": {
+                          "$ref": "#/components/schemas/PaginationMeta"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/v1/streets": {
+      "get": {
+        "tags": [
+          "Географія"
+        ],
+        "summary": "Отримання вулиць",
+        "description": "Повертає список вулиць міста. Параметр city_uuid є обов'язковим.",
+        "parameters": [
+          {
+            "name": "city_uuid",
+            "in": "query",
+            "required": true,
+            "description": "UUID міста (обов'язковий)",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "uuid",
+            "in": "query",
+            "description": "UUID конкретної вулиці",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Пошук за назвою вулиці (full-text від 3 символів)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Мова відповіді",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ua",
+                "en"
+              ],
+              "default": "ua"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/page"
+          },
+          {
+            "$ref": "#/components/parameters/limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Список вулиць",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Street"
+                          }
+                        },
+                        "meta": {
+                          "$ref": "#/components/schemas/PaginationMeta"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/v1/warehouses": {
+      "get": {
+        "tags": [
+          "Відділення"
+        ],
+        "summary": "Отримання відділень перевізника",
+        "description": "Повертає список відділень/поштоматів обраного перевізника у вказаному місті. Параметри carrier та city_uuid є обов'язковими.",
+        "parameters": [
+          {
+            "name": "carrier",
+            "in": "query",
+            "required": true,
+            "description": "Тип перевізника",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "novaposhta",
+                "ukrposhta",
+                "meest",
+                "rozetka"
+              ]
+            }
+          },
+          {
+            "name": "city_uuid",
+            "in": "query",
+            "required": true,
+            "description": "UUID міста",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "uuid",
+            "in": "query",
+            "description": "UUID конкретного відділення",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "number",
+            "in": "query",
+            "description": "Номер відділення",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "postcode",
+            "in": "query",
+            "description": "Поштовий індекс (тільки для ukrposhta)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "description": "Тип відділення: postomat — поштомат, branch — відділення (всі інші типи)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "postomat",
+                "branch"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Пошук за назвою або адресою",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/page"
+          },
+          {
+            "$ref": "#/components/parameters/limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Список відділень",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "oneOf": [
+                              {
+                                "$ref": "#/components/schemas/NovaPoshtaWarehouse"
+                              },
+                              {
+                                "$ref": "#/components/schemas/UkrposhtaWarehouse"
+                              },
+                              {
+                                "$ref": "#/components/schemas/MeestWarehouse"
+                              },
+                              {
+                                "$ref": "#/components/schemas/RozetkaWarehouse"
+                              }
+                            ]
+                          }
+                        },
+                        "meta": {
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/PaginationMeta"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "carrier": {
+                                  "type": "string",
+                                  "example": "novaposhta"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/v1/info": {
+      "get": {
+        "tags": [
+          "Сервіс"
+        ],
+        "summary": "Інформація про API",
+        "description": "Повертає версію API, список ендпоінтів та інформацію про ліміт запитів поточного ключа.",
+        "responses": {
+          "200": {
+            "description": "Інформація про API",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/SuccessResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/ApiInfo"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "api_version": "1.0",
+                    "endpoints": {
+                      "GET /v1/regions": "Отримання областей",
+                      "GET /v1/districts": "Отримання районів",
+                      "GET /v1/cities": "Отримання міст",
+                      "GET /v1/streets": "Отримання вулиць",
+                      "GET /v1/warehouses": "Отримання відділень (carrier: novaposhta, ukrposhta, meest, rozetka)",
+                      "GET /v1/info": "Інформація про API"
+                    },
+                    "rate_limit": {
+                      "limit": 1000,
+                      "used": 42,
+                      "remaining": 958
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitExceeded"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "API ключ у форматі Bearer Token. Для ключів з restriction_type=hmac додатково потрібні заголовки X-Timestamp та X-Signature."
+      }
+    },
+    "parameters": {
+      "page": {
+        "name": "page",
+        "in": "query",
+        "description": "Номер сторінки",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        }
+      },
+      "limit": {
+        "name": "limit",
+        "in": "query",
+        "description": "Кількість записів на сторінку (макс. 100)",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 50
+        }
+      },
+      "carrier_filter": {
+        "name": "carrier",
+        "in": "query",
+        "description": "Фільтрація за перевізником — повертати тільки ті записи, де є відділення вказаного перевізника",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "novaposhta",
+            "ukrposhta",
+            "meest",
+            "rozetka"
+          ]
+        }
+      }
+    },
+    "schemas": {
+      "SuccessResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "code": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "PaginationMeta": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "example": 150
+          },
+          "page": {
+            "type": "integer",
+            "example": 1
+          },
+          "limit": {
+            "type": "integer",
+            "example": 50
+          },
+          "pages": {
+            "type": "integer",
+            "example": 3
+          }
+        }
+      },
+      "Region": {
+        "type": "object",
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name_ua": {
+            "type": "string",
+            "example": "Київська"
+          },
+          "name_en": {
+            "type": "string",
+            "example": "Kyivska"
+          },
+          "name": {
+            "type": "string",
+            "example": "Київська",
+            "description": "Назва обраною мовою"
+          },
+          "koatuu": {
+            "type": "string",
+            "example": "3200000000"
+          },
+          "katottg": {
+            "type": "string",
+            "example": "UA32000000000000000"
+          }
+        }
+      },
+      "District": {
+        "type": "object",
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "region_uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name_ua": {
+            "type": "string",
+            "example": "Бориспільський"
+          },
+          "name_en": {
+            "type": "string",
+            "example": "Boryspilskyi"
+          },
+          "name": {
+            "type": "string",
+            "description": "Назва обраною мовою"
+          },
+          "koatuu": {
+            "type": "string"
+          },
+          "katottg": {
+            "type": "string"
+          },
+          "region_name_ua": {
+            "type": "string",
+            "example": "Київська"
+          },
+          "region_name_en": {
+            "type": "string",
+            "example": "Kyivska"
+          }
+        }
+      },
+      "City": {
+        "type": "object",
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "region_uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "district_uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name_ua": {
+            "type": "string",
+            "example": "Київ"
+          },
+          "name_en": {
+            "type": "string",
+            "example": "Kyiv"
+          },
+          "city_type": {
+            "type": "string",
+            "example": "місто"
+          },
+          "city_type_en": {
+            "type": "string",
+            "example": "city"
+          },
+          "city_type_short": {
+            "type": "string",
+            "example": "м."
+          },
+          "city_type_short_en": {
+            "type": "string",
+            "example": "c."
+          },
+          "koatuu": {
+            "type": "string"
+          },
+          "katottg": {
+            "type": "string"
+          },
+          "population": {
+            "type": "integer",
+            "example": 2967360
+          },
+          "latitude": {
+            "type": "string",
+            "example": "50.4501"
+          },
+          "longitude": {
+            "type": "string",
+            "example": "30.5234"
+          },
+          "is_districtcenter": {
+            "type": "integer",
+            "example": 1
+          },
+          "region_name_ua": {
+            "type": "string",
+            "example": "Київська"
+          },
+          "region_name_en": {
+            "type": "string",
+            "example": "Kyivska"
+          },
+          "district_name_ua": {
+            "type": "string",
+            "example": "Київський"
+          },
+          "district_name_en": {
+            "type": "string",
+            "example": "Kyivskyi"
+          }
+        }
+      },
+      "Street": {
+        "type": "object",
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "city_uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name_ua": {
+            "type": "string",
+            "example": "Хрещатик"
+          },
+          "name_en": {
+            "type": "string",
+            "example": "Khreshchatyk"
+          },
+          "street_type_ua": {
+            "type": "string",
+            "example": "вулиця"
+          },
+          "street_type_en": {
+            "type": "string",
+            "example": "street"
+          },
+          "street_type_short_ua": {
+            "type": "string",
+            "example": "вул."
+          },
+          "street_type_short_en": {
+            "type": "string",
+            "example": "str."
+          },
+          "old_name_ua": {
+            "type": "string",
+            "nullable": true
+          },
+          "old_name_en": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "NovaPoshtaWarehouse": {
+        "type": "object",
+        "description": "Відділення Нова Пошта",
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "city_uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "np_ref": {
+            "type": "string",
+            "description": "Ref Нової Пошти"
+          },
+          "number": {
+            "type": "string",
+            "example": "1"
+          },
+          "name": {
+            "type": "string",
+            "example": "Відділення №1 (до 30 кг): вул. Пирогівський шлях, 135"
+          },
+          "address": {
+            "type": "string"
+          },
+          "latitude": {
+            "type": "string"
+          },
+          "longitude": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "example": "Working"
+          },
+          "category": {
+            "type": "string",
+            "example": "Branch"
+          }
+        }
+      },
+      "UkrposhtaWarehouse": {
+        "type": "object",
+        "description": "Відділення Укрпошти",
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "city_uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "region_uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "postcode": {
+            "type": "string",
+            "example": "01001"
+          },
+          "po_index": {
+            "type": "string"
+          },
+          "number": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "example": "Київ-1"
+          },
+          "name_en": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "description": "Тип відділення"
+          },
+          "type_description": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "is_mobile": {
+            "type": "integer"
+          },
+          "is_stationary": {
+            "type": "integer"
+          },
+          "latitude": {
+            "type": "string"
+          },
+          "longitude": {
+            "type": "string"
+          },
+          "schedule": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          }
+        }
+      },
+      "MeestWarehouse": {
+        "type": "object",
+        "description": "Відділення Meest Express",
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "city_uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "region_uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "meest_br_id": {
+            "type": "string"
+          },
+          "number": {
+            "type": "string"
+          },
+          "number_showcase": {
+            "type": "string"
+          },
+          "city_ua": {
+            "type": "string"
+          },
+          "city_en": {
+            "type": "string"
+          },
+          "street_ua": {
+            "type": "string"
+          },
+          "street_en": {
+            "type": "string"
+          },
+          "street_number": {
+            "type": "string"
+          },
+          "postcode": {
+            "type": "string"
+          },
+          "latitude": {
+            "type": "string"
+          },
+          "longitude": {
+            "type": "string"
+          },
+          "location_description": {
+            "type": "string"
+          },
+          "type_ua": {
+            "type": "string"
+          },
+          "type_en": {
+            "type": "string"
+          },
+          "schedule": {
+            "type": "string"
+          },
+          "parcel_max_kg": {
+            "type": "number"
+          },
+          "place_max_kg": {
+            "type": "number"
+          }
+        }
+      },
+      "RozetkaWarehouse": {
+        "type": "object",
+        "description": "Відділення Rozetka Delivery",
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "city_uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "rz_department_id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "city_name": {
+            "type": "string"
+          },
+          "street_name": {
+            "type": "string"
+          },
+          "house": {
+            "type": "string"
+          },
+          "latitude": {
+            "type": "string"
+          },
+          "longitude": {
+            "type": "string"
+          },
+          "schedule": {
+            "type": "string"
+          },
+          "carrier_name": {
+            "type": "string"
+          },
+          "department_type_name": {
+            "type": "string"
+          }
+        }
+      },
+      "ApiInfo": {
+        "type": "object",
+        "properties": {
+          "api_version": {
+            "type": "string",
+            "example": "1.0"
+          },
+          "endpoints": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "rate_limit": {
+            "type": "object",
+            "properties": {
+              "limit": {
+                "type": "integer",
+                "example": 1000
+              },
+              "used": {
+                "type": "integer",
+                "example": 42
+              },
+              "remaining": {
+                "type": "integer",
+                "example": 958
+              }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Невірний запит — відсутній обов'язковий параметр",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "success": false,
+              "error": {
+                "message": "Параметр city_uuid або city_id є обов'язковим",
+                "code": "MISSING_PARAMETER"
+              }
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Помилка автентифікації",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "examples": {
+              "missing": {
+                "summary": "Ключ не надано",
+                "value": {
+                  "success": false,
+                  "error": {
+                    "message": "API ключ не надано",
+                    "code": "API_KEY_MISSING"
+                  }
+                }
+              },
+              "invalid": {
+                "summary": "Невірний ключ",
+                "value": {
+                  "success": false,
+                  "error": {
+                    "message": "Невірний API ключ",
+                    "code": "API_KEY_INVALID"
+                  }
+                }
+              },
+              "inactive": {
+                "summary": "Деактивований ключ",
+                "value": {
+                  "success": false,
+                  "error": {
+                    "message": "API ключ деактивовано",
+                    "code": "API_KEY_INACTIVE"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Доступ заборонено (IP, домен або HMAC)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "examples": {
+              "ip": {
+                "summary": "IP не дозволено",
+                "value": {
+                  "success": false,
+                  "error": {
+                    "message": "IP адреса не дозволена",
+                    "code": "IP_FORBIDDEN"
+                  }
+                }
+              },
+              "domain": {
+                "summary": "Домен не дозволено",
+                "value": {
+                  "success": false,
+                  "error": {
+                    "message": "Домен не дозволений",
+                    "code": "DOMAIN_FORBIDDEN"
+                  }
+                }
+              },
+              "hmac_missing": {
+                "summary": "HMAC заголовки відсутні",
+                "value": {
+                  "success": false,
+                  "error": {
+                    "message": "HMAC підпис відсутній (потрібні заголовки X-Timestamp та X-Signature)",
+                    "code": "HMAC_MISSING"
+                  }
+                }
+              },
+              "hmac_expired": {
+                "summary": "Запит застарів",
+                "value": {
+                  "success": false,
+                  "error": {
+                    "message": "Запит застарів (X-Timestamp має бути в межах ±5 хвилин)",
+                    "code": "HMAC_EXPIRED"
+                  }
+                }
+              },
+              "hmac_invalid": {
+                "summary": "Невірний HMAC підпис",
+                "value": {
+                  "success": false,
+                  "error": {
+                    "message": "Невірний HMAC підпис",
+                    "code": "HMAC_INVALID"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "RateLimitExceeded": {
+        "description": "Перевищено ліміт запитів",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "success": false,
+              "error": {
+                "message": "Перевищено ліміт запитів на добу",
+                "code": "RATE_LIMIT_EXCEEDED",
+                "rate_limit": 1000,
+                "requests_today": 1000
+              }
+            }
+          }
+        }
+      },
+      "ServerError": {
+        "description": "Внутрішня помилка сервера",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "success": false,
+              "error": {
+                "message": "Внутрішня помилка сервера",
+                "code": "SERVER_ERROR"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Географія",
+      "description": "Області, райони, міста та вулиці України"
+    },
+    {
+      "name": "Відділення",
+      "description": "Відділення та поштомати перевізників"
+    },
+    {
+      "name": "Сервіс",
+      "description": "Сервісні ендпоінти"
+    }
+  ]
+}
