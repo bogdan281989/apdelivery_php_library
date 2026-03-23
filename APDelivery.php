@@ -291,6 +291,8 @@ class APDelivery
      *   'limit'       (int)      Results per page, max 100 (default 50).
      *
      * @return array  {'success': true, 'data': District[], 'meta': PaginationMeta}
+     *   District fields: uuid, region_uuid, name_ua, name_en, name, koatuu, katottg,
+     *                    region_name_ua, region_name_en
      */
     public function getDistricts(array $params = array())
     {
@@ -315,6 +317,10 @@ class APDelivery
      *   'limit'         (int)     Results per page, max 100.
      *
      * @return array  {'success': true, 'data': City[], 'meta': PaginationMeta}
+     *   City fields: uuid, region_uuid, district_uuid, name_ua, name_en, name,
+     *                city_type, city_type_en, city_type_short, city_type_short_en,
+     *                koatuu, katottg, population, latitude, longitude, is_districtcenter,
+     *                region_name_ua, region_name_en, district_name_ua, district_name_en
      */
     public function getCities(array $params = array())
     {
@@ -336,6 +342,9 @@ class APDelivery
      *   'limit'     (int)               Results per page, max 100.
      *
      * @return array  {'success': true, 'data': Street[], 'meta': PaginationMeta}
+     *   Street fields: uuid, city_uuid, name_ua, name_en,
+     *                  street_type_ua, street_type_en, street_type_short_ua, street_type_short_en,
+     *                  old_name_ua, old_name_en
      * @throws APDeliveryValidationException If neither city_uuid nor city_id is provided.
      */
     public function getStreets(array $params = array())
@@ -374,6 +383,20 @@ class APDelivery
      *   'limit'     (int)                Results per page, max 100.
      *
      * @return array  {'success': true, 'data': Warehouse[], 'meta': {..., 'carrier': string}}
+     *   NovaPoshtaWarehouse fields: uuid, city_uuid, np_ref, number, name, address,
+     *                               latitude, longitude, phone, status, category
+     *   UkrposhtaWarehouse fields:  uuid, city_uuid, region_uuid, postcode, po_index,
+     *                               number, name, name_en, address, type, type_description,
+     *                               category, is_mobile, is_stationary, latitude, longitude,
+     *                               schedule, phone
+     *   MeestWarehouse fields:      uuid, city_uuid, region_uuid, meest_br_id, number,
+     *                               number_showcase, city_ua, city_en, street_ua, street_en,
+     *                               street_number, postcode, latitude, longitude,
+     *                               location_description, type_ua, type_en, schedule,
+     *                               parcel_max_kg, place_max_kg
+     *   RozetkaWarehouse fields:    uuid, city_uuid, rz_department_id, name, city_name,
+     *                               street_name, house, latitude, longitude, schedule,
+     *                               carrier_name, department_type_name
      * @throws APDeliveryValidationException If required params are missing or invalid.
      */
     public function getWarehouses(array $params = array())
