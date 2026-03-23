@@ -222,6 +222,12 @@ $result = $client->getDistricts([
 ]);
 
 // $result['meta'] містить: total, page, limit, pages
+
+foreach ($result['data'] as $district) {
+    echo $district['name'] . "\n";
+    // Також: uuid, region_uuid, name_ua, name_en, koatuu, katottg,
+    //        region_name_ua, region_name_en
+}
 ```
 
 #### Міста (`/v1/cities`)
@@ -242,8 +248,9 @@ $result = $client->getCities([
 foreach ($result['data'] as $city) {
     echo $city['name_ua'] . ' (' . $city['city_type_short'] . ')' . "\n";
     // Також: uuid, region_uuid, district_uuid, name_en, koatuu, katottg,
+    //        city_type, city_type_en, city_type_short_en,
     //        population, latitude, longitude, is_districtcenter,
-    //        region_name, district_name
+    //        region_name_ua, region_name_en, district_name_ua, district_name_en
 }
 ```
 
@@ -261,8 +268,9 @@ $result = $client->getStreets([
 ]);
 
 foreach ($result['data'] as $street) {
-    echo $street['street_type_short'] . ' ' . $street['name_ua'] . "\n";
-    // Також: uuid, city_uuid, name_en, street_type, old_name_ua, old_name_en
+    echo $street['street_type_short_ua'] . ' ' . $street['name_ua'] . "\n";
+    // Також: uuid, city_uuid, name_en, street_type_ua, street_type_en,
+    //        street_type_short_en, old_name_ua, old_name_en
 }
 ```
 
@@ -317,9 +325,9 @@ $result = $client->getWarehouses([
 
 foreach ($result['data'] as $w) {
     echo $w['postcode'] . ' — ' . $w['name'] . "\n";
-    // Також: po_index, number, name_en, address, type, type_description,
-    //        category, is_mobile, is_stationary, latitude, longitude,
-    //        schedule, phone
+    // Також: uuid, city_uuid, region_uuid, po_index, number, name_en, address,
+    //        type, type_description, category, is_mobile, is_stationary,
+    //        latitude, longitude, schedule, phone
 }
 ```
 
@@ -333,8 +341,8 @@ $result = $client->getWarehouses([
 
 foreach ($result['data'] as $w) {
     echo $w['number_showcase'] . ': ' . $w['street_ua'] . ', ' . $w['street_number'] . "\n";
-    // Також: meest_br_id, city_ua, city_en, street_en, postcode,
-    //        latitude, longitude, location_description, type_ua, type_en,
+    // Також: uuid, city_uuid, region_uuid, meest_br_id, city_ua, city_en, street_en,
+    //        postcode, latitude, longitude, location_description, type_ua, type_en,
     //        schedule, parcel_max_kg, place_max_kg
 }
 ```
