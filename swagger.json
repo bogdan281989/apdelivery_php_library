@@ -447,12 +447,12 @@
           "Відділення"
         ],
         "summary": "Отримання відділень перевізника",
-        "description": "Повертає список відділень/поштоматів обраного перевізника у вказаному місті. Параметри carrier та city_uuid є обов'язковими.",
+        "description": "Повертає список відділень/поштоматів обраного перевізника у вказаному місті. Потрібно вказати city_uuid або city_name. Параметр carrier необов'язковий.",
         "parameters": [
           {
             "name": "carrier",
             "in": "query",
-            "required": true,
+            "required": false,
             "description": "Тип перевізника",
             "schema": {
               "type": "string",
@@ -467,11 +467,20 @@
           {
             "name": "city_uuid",
             "in": "query",
-            "required": true,
-            "description": "UUID міста",
+            "required": false,
+            "description": "UUID міста (потрібен city_uuid або city_name)",
             "schema": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          {
+            "name": "city_name",
+            "in": "query",
+            "required": false,
+            "description": "Назва міста для пошуку (українською або англійською). Використовується замість city_uuid.",
+            "schema": {
+              "type": "string"
             }
           },
           {
@@ -680,11 +689,11 @@
       "limit": {
         "name": "limit",
         "in": "query",
-        "description": "Кількість записів на сторінку (макс. 100)",
+        "description": "Кількість записів на сторінку (макс. 1500)",
         "schema": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 100,
+          "maximum": 1500,
           "default": 50
         }
       },
@@ -967,12 +976,21 @@
             "type": "string",
             "example": "1"
           },
-          "name": {
+          "name_ua": {
             "type": "string",
             "example": "Відділення №1 (до 30 кг): вул. Пирогівський шлях, 135"
           },
-          "address": {
-            "type": "string"
+          "name_en": {
+            "type": "string",
+            "example": "Branch #1 (up to 30 kg): Pyrogivsky Shlyakh St., 135"
+          },
+          "address_ua": {
+            "type": "string",
+            "example": "вул. Пирогівський шлях, 135"
+          },
+          "address_en": {
+            "type": "string",
+            "example": "Pyrogivsky Shlyakh St., 135"
           },
           "latitude": {
             "type": "string"
@@ -1019,14 +1037,17 @@
           "number": {
             "type": "string"
           },
-          "name": {
+          "name_ua": {
             "type": "string",
             "example": "Київ-1"
           },
           "name_en": {
             "type": "string"
           },
-          "address": {
+          "address_ua": {
+            "type": "string"
+          },
+          "address_en": {
             "type": "string"
           },
           "type": {
@@ -1143,14 +1164,20 @@
           "rz_department_id": {
             "type": "integer"
           },
-          "name": {
+          "name_ua": {
+            "type": "string",
+            "description": "Назва відділення (тип + назва), наприклад: 'Точка видачі - Баришівка, вул. Неокласиків, 9'"
+          },
+          "name_en": {
+            "type": "string",
+            "description": "Branch name in English (type + name)"
+          },
+          "street_name_ua": {
             "type": "string"
           },
-          "city_name": {
-            "type": "string"
-          },
-          "street_name": {
-            "type": "string"
+          "street_name_en": {
+            "type": "string",
+            "nullable": true
           },
           "house": {
             "type": "string"
@@ -1161,13 +1188,10 @@
           "longitude": {
             "type": "string"
           },
-          "schedule": {
+          "department_type_name_ua": {
             "type": "string"
           },
-          "carrier_name": {
-            "type": "string"
-          },
-          "department_type_name": {
+          "department_type_name_en": {
             "type": "string"
           }
         }
