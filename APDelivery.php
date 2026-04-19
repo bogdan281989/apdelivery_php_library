@@ -283,12 +283,11 @@ class APDelivery
      * @param array $params  Optional filters:
      *   'uuid'        (string)   UUID of a specific district.
      *   'region_uuid' (string)   Filter by region UUID.
-     *   'region_id'   (int)      Filter by region ID.
      *   'search'      (string)   Search by name.
      *   'lang'        (string)   'ua' (default) or 'en'.
      *   'carrier'     (string)   Filter by carrier.
      *   'page'        (int)      Page number (default 1).
-     *   'limit'       (int)      Results per page, max 100 (default 50).
+     *   'limit'       (int)      Results per page, max 1500 (default 50).
      *
      * @return array  {'success': true, 'data': District[], 'meta': PaginationMeta}
      *   District fields: uuid, region_uuid, name_ua, name_en, name, koatuu, katottg,
@@ -307,14 +306,12 @@ class APDelivery
      * @param array $params  Optional filters:
      *   'uuid'          (string)  UUID of a specific city.
      *   'region_uuid'   (string)  Filter by region.
-     *   'region_id'     (int)     Filter by region ID.
      *   'district_uuid' (string)  Filter by district.
-     *   'district_id'   (int)     Filter by district ID.
      *   'search'        (string)  Full-text search (≥ 3 chars).
      *   'lang'          (string)  'ua' (default) or 'en'.
      *   'carrier'       (string)  Filter by carrier.
      *   'page'          (int)     Page number.
-     *   'limit'         (int)     Results per page, max 100.
+     *   'limit'         (int)     Results per page, max 1500.
      *
      * @return array  {'success': true, 'data': City[], 'meta': PaginationMeta}
      *   City fields: uuid, region_uuid, district_uuid, name_ua, name_en, name,
@@ -330,32 +327,31 @@ class APDelivery
 
     /**
      * GET /v1/streets — List of streets in a city.
-     * Either city_uuid or city_id is required.
+     * city_uuid is required.
      *
      * @param array $params  Parameters:
-     *   'city_uuid' (string) *required*  UUID of the city (or city_id).
-     *   'city_id'   (int)               City ID (alternative to city_uuid).
+     *   'city_uuid' (string) *required*  UUID of the city.
      *   'uuid'      (string)            UUID of a specific street.
      *   'search'    (string)            Full-text search (≥ 3 chars).
      *   'lang'      (string)            'ua' (default) or 'en'.
      *   'page'      (int)               Page number.
-     *   'limit'     (int)               Results per page, max 100.
+     *   'limit'     (int)               Results per page, max 1500.
      *
      * @return array  {'success': true, 'data': Street[], 'meta': PaginationMeta}
      *   Street fields: uuid, city_uuid, name_ua, name_en,
      *                  street_type_ua, street_type_en, street_type_short_ua, street_type_short_en,
      *                  old_name_ua, old_name_en
-     * @throws APDeliveryValidationException If neither city_uuid nor city_id is provided.
+     * @throws APDeliveryValidationException If city_uuid is not provided.
      */
     public function getStreets(array $params = array())
     {
-        if (empty($params['city_uuid']) && empty($params['city_id'])) {
+        if (empty($params['city_uuid'])) {
             throw new APDeliveryValidationException(
-                'Either "city_uuid" or "city_id" is required to fetch streets.'
+                '"city_uuid" is required to fetch streets.'
             );
         }
 
-        $allowed = array('city_uuid', 'city_id', 'uuid', 'search', 'lang', 'page', 'limit');
+        $allowed = array('city_uuid', 'uuid', 'search', 'lang', 'page', 'limit');
         $params  = $this->pickAllowed($params, $allowed);
         $params  = $this->sanitizeLang($params);
         $params  = $this->sanitizePagination($params);
@@ -369,48 +365,47 @@ class APDelivery
 
     /**
      * GET /v1/warehouses — Branches and post-machines of a carrier in a city.
-     * Both carrier and city_uuid are required.
+     * Either city_uuid or city_name is required. carrier is optional.
      *
      * @param array $params  Parameters:
-     *   'carrier'   (string) *required*  One of: novaposhta, ukrposhta, meest, rozetka.
-     *   'city_uuid' (string) *required*  UUID of the city.
-     *   'uuid'      (string)             UUID of a specific branch.
-     *   'number'    (string)             Branch number.
-     *   'postcode'  (string)             Postcode (ukrposhta only).
-     *   'type'      (string)             'postomat' or 'branch'.
-     *   'search'    (string)             Search by name or address.
-     *   'page'      (int)                Page number.
-     *   'limit'     (int)                Results per page, max 100.
+     *   'carrier'   (string)  One of: novaposhta, ukrposhta, meest, rozetka.
+     *   'city_uuid' (string)  UUID of the city (required if city_name not provided).
+     *   'city_name' (string)  Name of the city (required if city_uuid not provided).
+     *   'uuid'      (string)  UUID of a specific branch.
+     *   'number'    (string)  Branch number.
+     *   'postcode'  (string)  Postcode (ukrposhta only).
+     *   'type'      (string)  'postomat' or 'branch'.
+     *   'search'    (string)  Search by name or address.
+     *   'page'      (int)     Page number.
+     *   'limit'     (int)     Results per page, max 1500.
      *
      * @return array  {'success': true, 'data': Warehouse[], 'meta': {..., 'carrier': string}}
-     *   NovaPoshtaWarehouse fields: uuid, city_uuid, np_ref, number, name, address,
-     *                               latitude, longitude, phone, status, category
+     *   NovaPoshtaWarehouse fields: uuid, city_uuid, np_ref, number, name_ua, name_en,
+     *                               address_ua, address_en, latitude, longitude, phone,
+     *                               status, category
      *   UkrposhtaWarehouse fields:  uuid, city_uuid, region_uuid, postcode, po_index,
-     *                               number, name, name_en, address, type, type_description,
-     *                               category, is_mobile, is_stationary, latitude, longitude,
-     *                               schedule, phone
+     *                               number, name_ua, name_en, address_ua, address_en,
+     *                               type, type_description, category, is_mobile,
+     *                               is_stationary, latitude, longitude, schedule, phone
      *   MeestWarehouse fields:      uuid, city_uuid, region_uuid, meest_br_id, number,
      *                               number_showcase, city_ua, city_en, street_ua, street_en,
      *                               street_number, postcode, latitude, longitude,
      *                               location_description, type_ua, type_en, schedule,
      *                               parcel_max_kg, place_max_kg
-     *   RozetkaWarehouse fields:    uuid, city_uuid, rz_department_id, name, city_name,
-     *                               street_name, house, latitude, longitude, schedule,
-     *                               carrier_name, department_type_name
+     *   RozetkaWarehouse fields:    uuid, city_uuid, rz_department_id, name_ua, name_en,
+     *                               street_name_ua, street_name_en, house, latitude,
+     *                               longitude, department_type_name_ua, department_type_name_en
      * @throws APDeliveryValidationException If required params are missing or invalid.
      */
     public function getWarehouses(array $params = array())
     {
-        if (empty($params['carrier'])) {
+        if (empty($params['city_uuid']) && empty($params['city_name'])) {
             throw new APDeliveryValidationException(
-                '"carrier" is required. Allowed values: ' . implode(', ', self::$validCarriers)
+                '"city_uuid" or "city_name" is required to fetch warehouses.'
             );
         }
-        if (empty($params['city_uuid'])) {
-            throw new APDeliveryValidationException('"city_uuid" is required to fetch warehouses.');
-        }
 
-        if (!in_array($params['carrier'], self::$validCarriers, true)) {
+        if (!empty($params['carrier']) && !in_array($params['carrier'], self::$validCarriers, true)) {
             throw new APDeliveryValidationException(
                 'Invalid carrier "' . $params['carrier'] . '". Allowed: ' . implode(', ', self::$validCarriers)
             );
@@ -422,7 +417,7 @@ class APDelivery
             );
         }
 
-        $allowed = array('carrier', 'city_uuid', 'uuid', 'number', 'postcode', 'type', 'search', 'page', 'limit');
+        $allowed = array('carrier', 'city_uuid', 'city_name', 'uuid', 'number', 'postcode', 'type', 'search', 'page', 'limit');
         $params  = $this->pickAllowed($params, $allowed);
         $params  = $this->sanitizePagination($params);
 
@@ -834,8 +829,7 @@ class APDelivery
      */
     private function filterGeoParams(array $params, $withPagination)
     {
-        $allowed = array('uuid', 'region_uuid', 'region_id', 'district_uuid', 'district_id',
-                         'search', 'lang', 'carrier');
+        $allowed = array('uuid', 'region_uuid', 'district_uuid', 'search', 'lang', 'carrier');
         if ($withPagination) {
             $allowed[] = 'page';
             $allowed[] = 'limit';
@@ -906,7 +900,7 @@ class APDelivery
             $params['page'] = max(1, (int) $params['page']);
         }
         if (isset($params['limit'])) {
-            $params['limit'] = min(100, max(1, (int) $params['limit']));
+            $params['limit'] = min(1500, max(1, (int) $params['limit']));
         }
         return $params;
     }
