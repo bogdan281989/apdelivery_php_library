@@ -382,19 +382,22 @@ class APDelivery
      * @return array  {'success': true, 'data': Warehouse[], 'meta': {..., 'carrier': string}}
      *   NovaPoshtaWarehouse fields: uuid, city_uuid, np_ref, number, name_ua, name_en,
      *                               address_ua, address_en, latitude, longitude, phone,
-     *                               status, category
+     *                               status, category, schedule_text_ua, schedule_text_en
      *   UkrposhtaWarehouse fields:  uuid, city_uuid, region_uuid, postcode, po_index,
      *                               number, name_ua, name_en, address_ua, address_en,
      *                               type, type_description, category, is_mobile,
-     *                               is_stationary, latitude, longitude, schedule, phone
+     *                               is_stationary, latitude, longitude, schedule, phone,
+     *                               schedule_text_ua, schedule_text_en
      *   MeestWarehouse fields:      uuid, city_uuid, region_uuid, meest_br_id, number,
      *                               number_showcase, city_ua, city_en, street_ua, street_en,
      *                               street_number, postcode, latitude, longitude,
      *                               location_description, type_ua, type_en, schedule,
-     *                               parcel_max_kg, place_max_kg
+     *                               parcel_max_kg, place_max_kg,
+     *                               schedule_text_ua, schedule_text_en
      *   RozetkaWarehouse fields:    uuid, city_uuid, rz_department_id, name_ua, name_en,
      *                               street_name_ua, street_name_en, house, latitude,
-     *                               longitude, department_type_name_ua, department_type_name_en
+     *                               longitude, department_type_name_ua, department_type_name_en,
+     *                               schedule_text_ua, schedule_text_en
      * @throws APDeliveryValidationException If required params are missing or invalid.
      */
     public function getWarehouses(array $params = array())
